@@ -1,0 +1,65 @@
+logql-proxy has been deployed.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Release:    {{ .Release.Name }}
+  Namespace:  {{ .Release.Namespace }}
+  Chart:      {{ .Chart.Name }}-{{ .Chart.Version }}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+{{- if not .Values.proxy.vlogs.url }}
+
+  ⚠  WARNING: proxy.vlogs.url is not set.
+     The proxy will fail to start. Set it to the base URL of your
+     VictoriaLogs instance, e.g.:
+
+       --set proxy.vlogs.url=http://victorialogs.monitoring.svc.cluster.local:9428
+
+{{- end }}
+
+SERVICE ACCESS
+  The proxy listens on port {{ .Values.proxy.server.listenAddr }}.
+
+  Cluster-internal endpoint:
+    http://{{ include "logql-proxy.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}
+
+  To access locally via port-forward:
+    kubectl port-forward -n {{ .Release.Namespace }} \
+      svc/{{ include "logql-proxy.fullname" . }} 3100:{{ .Values.service.port }}
+
+  Then open Grafana and add a Loki datasource pointing to:
+    http://localhost:3100
+
+{{- if .Values.ingress.enabled }}
+
+INGRESS
+  The proxy is accessible at:
+  {{- $scheme := "http" }}{{- if $.Values.ingress.tls }}{{- $scheme = "https" }}{{- end }}
+  {{- range .Values.ingress.hosts }}
+  • {{ $scheme }}://{{ .host }}/
+  {{- end }}
+{{- end }}
+
+{{- if .Values.httpRoute.enabled }}
+
+HTTP ROUTE (Gateway API)
+  An HTTPRoute has been created targeting:
+  {{- range .Values.httpRoute.parentRefs }}
+  • Gateway: {{ .name }}{{ if .namespace }}/{{ .namespace }}{{ end }}
+  {{- end }}
+  Hostnames:
+  {{- range .Values.httpRoute.hostnames }}
+  • {{ . }}
+  {{- end }}
+
+  Note: requires the Kubernetes Gateway API CRDs to be installed.
+  If not present: kubectl apply -f \
+    https://github.com/kubernetes-sigs/gateway-api/releases/latest/download/standard-install.yaml
+{{- end }}
+
+GRAFANA DATASOURCE
+  Add a Loki datasource in Grafana with:
+    URL: http://{{ include "logql-proxy.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}
+    Access: Server (default)
+
+HEALTH CHECK
+  kubectl get pods -n {{ .Release.Namespace }} -l "{{ include "logql-proxy.selectorLabels" . | replace ": " "=" | replace "\n" "," }}"

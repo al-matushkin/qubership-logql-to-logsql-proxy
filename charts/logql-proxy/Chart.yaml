@@ -1,0 +1,19 @@
+apiVersion: v2
+name: qubership-logql-to-logsql-proxy
+description: >
+  A LogQL-to-LogsQL translation proxy that makes VictoriaLogs appear as a
+  Loki datasource to Grafana Logs Drilldown.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - logs
+  - loki
+  - victorialogs
+  - grafana
+  - proxy
+home: https://github.com/netcracker/qubership-logql-to-logsql-proxy
+sources:
+  - https://github.com/netcracker/qubership-logql-to-logsql-proxy
+maintainers:
+  - name: yourname

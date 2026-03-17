@@ -1,0 +1,232 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# logql-proxy Helm chart — default values
+# ──────────────────────────────────────────────────────────────────────────────
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/netcracker/qubership-logql-to-logsql-proxy
+  pullPolicy: IfNotPresent
+  # Overrides the chart appVersion when set.
+  tag: ""
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+# ── Service Account ────────────────────────────────────────────────────────────
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  # If not set, a name is generated using the fullname template.
+  name: ""
+
+# ── Pod metadata ───────────────────────────────────────────────────────────────
+podAnnotations: {}
+podLabels: {}
+
+# ── Security contexts ──────────────────────────────────────────────────────────
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  runAsGroup: 65534
+  fsGroup: 65534
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+# ── Service ────────────────────────────────────────────────────────────────────
+service:
+  type: ClusterIP
+  port: 3100
+  annotations: {}
+
+# ── Ingress (classic Kubernetes Ingress) ──────────────────────────────────────
+# Enable this OR httpRoute — both can coexist but are independent.
+ingress:
+  enabled: false
+  # Ingress class name (e.g. "nginx", "traefik"). Leave empty to use cluster default.
+  className: ""
+  annotations: {}
+    # nginx.ingress.kubernetes.io/rewrite-target: /
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: logql-proxy.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: logql-proxy-tls
+  #    hosts:
+  #      - logql-proxy.example.com
+
+# ── HTTPRoute (Kubernetes Gateway API v1) ─────────────────────────────────────
+# Requires the Gateway API CRDs to be installed in the cluster:
+#   kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/latest/download/standard-install.yaml
+#
+# Enable this OR ingress — both can coexist but are independent.
+httpRoute:
+  enabled: false
+  annotations: {}
+  # parentRefs defines which Gateway(s) this route attaches to.
+  parentRefs:
+    - name: my-gateway
+      namespace: gateway-system
+      # sectionName: http   # optional: target a specific listener by name
+  # Hostnames this route matches. Must be covered by the parent Gateway listeners.
+  hostnames:
+    - logql-proxy.example.com
+  # Additional HTTPRoute rules to prepend before the default catch-all rule.
+  # Each entry is a raw HTTPRoute rule object (matches / filters / backendRefs).
+  # The default rule forwards all traffic to the proxy service on port 3100.
+  additionalRules: []
+  # Example — add a rule that redirects HTTP to HTTPS:
+  # additionalRules:
+  #   - matches:
+  #       - path:
+  #           type: PathPrefix
+  #           value: /
+  #     filters:
+  #       - type: RequestRedirect
+  #         requestRedirect:
+  #           scheme: https
+  #           statusCode: 301
+
+# ── Resource requests/limits ───────────────────────────────────────────────────
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    # No CPU limit by default (prevents throttling for bursty proxy workloads).
+    memory: 512Mi
+
+# ── Liveness / Readiness probes ────────────────────────────────────────────────
+livenessProbe:
+  httpGet:
+    path: /ready
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: http
+  initialDelaySeconds: 3
+  periodSeconds: 5
+  failureThreshold: 3
+
+# ── Horizontal Pod Autoscaler ──────────────────────────────────────────────────
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+# ── Pod Disruption Budget ──────────────────────────────────────────────────────
+podDisruptionBudget:
+  enabled: false
+  # Exactly one of minAvailable / maxUnavailable should be set.
+  minAvailable: 1
+  # maxUnavailable: 1
+
+# ── Scheduling ────────────────────────────────────────────────────────────────
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# ── Extra environment variables ───────────────────────────────────────────────
+# These are appended to the container's env list verbatim.
+# Useful for injecting PROXY_* overrides or referencing additional secrets.
+extraEnv: []
+# - name: PROXY_LOG_LEVEL
+#   value: debug
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Proxy configuration
+#
+# All options below map directly to the proxy's config.yaml schema.
+# Non-sensitive values are rendered into a ConfigMap and mounted at
+# /etc/logql-proxy/config.yaml.
+#
+# Credentials (bearerToken, basicAuth password) are stored in a Kubernetes
+# Secret and injected as PROXY_* environment variables at runtime, so they
+# never appear in the ConfigMap.
+# ──────────────────────────────────────────────────────────────────────────────
+proxy:
+
+  server:
+    listenAddr: ":3100"
+    readTimeout: "30s"
+    writeTimeout: "60s"
+    idleTimeout: "90s"
+    gracefulTimeout: "15s"
+
+  vlogs:
+    # Required: full base URL of the VictoriaLogs instance.
+    # Example: "http://victorialogs.monitoring.svc.cluster.local:9428"
+    url: ""
+
+    timeout: "30s"
+    maxIdleConns: 100
+    maxConnsPerHost: 50
+
+    # ── Authentication (mutually exclusive) ───────────────────────────────────
+    #
+    # Option A — Bearer token.
+    # Set bearerToken to a literal value (creates a new Secret) OR reference
+    # an existing Secret via existingSecret (recommended for production).
+    bearerToken: ""
+
+    # Option B — HTTP Basic authentication.
+    basicAuth:
+      username: ""
+      # password is stored in a Secret; set it here only for non-production use.
+      # In production, prefer existingSecret.
+      password: ""
+
+    # ── Existing Secret reference ─────────────────────────────────────────────
+    # When set, no new Secret is created. The named Secret must already exist
+    # and contain the keys listed below.
+    existingSecret: ""
+    existingSecretBearerTokenKey: "bearer-token"
+    existingSecretBasicAuthUsernameKey: "basic-auth-username"
+    existingSecretBasicAuthPasswordKey: "basic-auth-password"
+
+    # ── Extra headers / query params forwarded to VL ──────────────────────────
+    extraHeaders: {}
+    #  X-Tenant-ID: "production"
+
+    extraParams: {}
+    #  accountID: "42"
+
+  limits:
+    maxConcurrentQueries: 50
+    maxQueueDepth: 100
+    maxResponseBodyBytes: 67108864   # 64 MiB
+    maxStreamsPerResponse: 5000
+    maxMemoryMB: 512
+    maxQueryRangeHours: 24
+    maxLimit: 5000
+    defaultLimit: 1000
+
+  labels:
+    # Static label allowlist returned by /loki/api/v1/labels.
+    # Empty = discover dynamically from VictoriaLogs /field_names on every request.
+    knownLabels: []
+    metadataCacheTTL: "5m"
+    metadataCacheSize: 256
+
+  log:
+    level: "info"    # debug | info | warn | error
+    format: "json"   # json | text

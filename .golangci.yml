@@ -1,0 +1,32 @@
+version: "2"
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - gocritic
+    - gofmt
+    - gosimple
+    - ineffassign
+    - unused
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+  govet:
+    enable-all: true
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - style
+      - performance
+
+issues:
+  max-same-issues: 0
+  exclude-rules:
+    # Test files can use dot imports and skip some checks
+    - path: "_test\\.go"
+      linters:
+        - errcheck

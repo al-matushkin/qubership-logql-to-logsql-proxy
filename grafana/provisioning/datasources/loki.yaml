@@ -1,0 +1,7 @@
+apiVersion: 1
+datasources:
+  - name: Loki (via proxy)
+    type: loki
+    url: http://logql-proxy:3100
+    access: proxy
+    isDefault: true

@@ -1,0 +1,118 @@
+{{- $secretName := include "logql-proxy.credentialsSecretName" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "logql-proxy.fullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "logql-proxy.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "logql-proxy.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      # Trigger a rolling restart when the ConfigMap content changes.
+      annotations:
+        checksum/config: {{ include "logql-proxy.configYaml" . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "logql-proxy.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "logql-proxy.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --config=/etc/logql-proxy/config.yaml
+          ports:
+            - name: http
+              containerPort: 3100
+              protocol: TCP
+          env:
+            # ── VictoriaLogs URL ────────────────────────────────────────────
+            # Allow overriding the URL at runtime without rebuilding the ConfigMap.
+            {{- if .Values.proxy.vlogs.url }}
+            - name: PROXY_VLOGS_URL
+              value: {{ .Values.proxy.vlogs.url | quote }}
+            {{- end }}
+            # ── Credentials from Secret ─────────────────────────────────────
+            # The proxy's env-var layer overrides config.yaml, so credentials
+            # only need to live in the Secret — never in the ConfigMap.
+            {{- if $secretName }}
+            - name: PROXY_VLOGS_BEARERTOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: {{ .Values.proxy.vlogs.existingSecretBearerTokenKey }}
+                  optional: true
+            - name: PROXY_VLOGS_BASICAUTH_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: {{ .Values.proxy.vlogs.existingSecretBasicAuthUsernameKey }}
+                  optional: true
+            - name: PROXY_VLOGS_BASICAUTH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: {{ .Values.proxy.vlogs.existingSecretBasicAuthPasswordKey }}
+                  optional: true
+            {{- end }}
+            # ── Extra environment variables ─────────────────────────────────
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/logql-proxy
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "logql-proxy.fullname" . }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

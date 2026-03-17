@@ -1,0 +1,45 @@
+server:
+  listenAddr: ":3100"
+  writeTimeout: 60s
+
+vlogs:
+  url: "http://victorialogs:9428"
+  timeout: 30s
+  maxIdleConns: 100
+  maxConnsPerHost: 50
+
+  # Option A: HTTP Basic auth
+  # basicAuth:
+  #   username: "grafana-proxy"
+  #   passwordFile: "/run/secrets/vlogs-password"
+
+  # Option B: Bearer token
+  # bearerToken: "my-secret-token"
+
+  # Extra headers added to every VL request
+  # extraHeaders:
+  #   X-Tenant-ID: "production"
+
+  # Extra query string params added to every VL request
+  # extraParams:
+  #   accountID: "42"
+
+limits:
+  maxConcurrentQueries: 50
+  maxQueueDepth: 100
+  maxResponseBodyBytes: 67108864  # 64 MiB
+  maxStreamsPerResponse: 5000
+  maxMemoryMB: 512
+  maxQueryRangeHours: 24
+  maxLimit: 5000
+  defaultLimit: 1000
+
+labels:
+  # Leave empty to discover dynamically from VL /field_names
+  knownLabels: []
+  metadataCacheTTL: 5m
+  metadataCacheSize: 256
+
+log:
+  level: "info"
+  format: "json"
