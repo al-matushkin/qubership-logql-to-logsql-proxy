@@ -6,10 +6,12 @@ linters:
     - govet
     - staticcheck
     - gocritic
-    - gofmt
-    - gosimple
     - ineffassign
     - unused
+
+formatters:
+  enable:
+    - gofmt
 
 linters-settings:
   errcheck:
