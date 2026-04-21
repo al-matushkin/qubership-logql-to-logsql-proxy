@@ -1,0 +1,11 @@
+{
+  "threshold": 5,
+  "ignore": [
+    "**/.git/**",
+    "**/charts/*/templates/*/*.yaml",
+    "**/charts/*/templates/*/*/*.yaml",
+    "**/docs/**",
+    "**/examples/**",
+    "**/testdata/**"
+  ]
+}
